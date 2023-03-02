@@ -1,0 +1,6 @@
+astropy[recommended]
+jupyter
+matplotlib
+numpy
+scipy
+git+ssh://github.com/JeffValenti/jvlib.git
