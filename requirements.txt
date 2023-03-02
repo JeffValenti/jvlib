@@ -2,5 +2,6 @@ astropy[recommended]
 jupyter
 matplotlib
 numpy
+pip
 scipy
-git+ssh://github.com/JeffValenti/jvlib.git
+git+https://github.com/JeffValenti/jvlib.git
