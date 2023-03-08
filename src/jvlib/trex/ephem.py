@@ -18,6 +18,13 @@ class BaseEphemeris:
         self.uparam = array(uparam) if uparam else None
         self.scale = scale
         self.ref = ref
+        self.cphase = None
+        self.ucphase = None
+        self.time = None
+        self.utime = None
+
+    def __str__(self):
+        pass
 
 class PolynomialEphemeris(BaseEphemeris):
     """Handle a polynomial ephemeris for a transiting exoplanet."""
