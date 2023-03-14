@@ -393,11 +393,16 @@ def get_mast_api_token(mast_api_token=None, prompt=False):
         raise ValueError(f"MAST API token is not a string " \
             f"with 32 alphanumeric characters: '{mast_api_token}'")
 
-def get_jwst_file(name):
+
+def get_jwst_file(name, auth=True):
     """Retrieve a JWST data file from MAST archive."""
     mast_url = "https://mast.stsci.edu/api/v0.1/Download/file"
-    params = {"uri": f"mast:JWST/product/{name}"}
-    r = requests_get(mast_url, params=params, stream=True)
+    params = dict(uri=f"mast:JWST/product/{name}")
+    if auth:
+        headers = dict(Authorization=f"token {get_mast_api_token()}")
+    else:
+        headers = {}
+    r = requests_get(mast_url, params=params, headers=headers, stream=True)
     r.raise_for_status()
     with open(name, "wb") as fobj:
         for chunk in r.iter_content(chunk_size=1024000):
