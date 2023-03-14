@@ -1,13 +1,12 @@
 from datetime import datetime, timezone
 from getpass import getpass
-from math import nan
 from pathlib import Path
 from requests import get as requests_get
 from os import getenv
 
 from astropy.table import unique as table_unique
 from astropy.time import Time
-from astroquery.mast import Mast, Observations
+from astroquery.mast import Mast
 from numpy import isnan as np_isnan
 
 
@@ -131,9 +130,9 @@ class JwstFilteredQuery:
             'Fgs': 'lamp',
             'GuideStar': 'gdstarid, gs_order',
             'Miri': 'filter, coronmsk, lamp',
-            'Nircam': 'module, channel, pupil, filter, coronmsk', 
-            'Niriss': 'pupil, filter, lamp', 
-            'Nirspec': 'filter, grating, msastate, lamp', 
+            'Nircam': 'module, channel, pupil, filter, coronmsk',
+            'Niriss': 'pupil, filter, lamp',
+            'Nirspec': 'filter, grating, msastate, lamp',
             }
         self.columns = []
         self.append_output_columns('date_beg, obs_id, category, targname')
@@ -221,13 +220,13 @@ class JwstFilteredQuery:
             newval = [
                 datetime.utcfromtimestamp(int(v[6:19]) / 1000)
                 if isinstance(v, str) and len(v) == 21 and
-                    v[:6] == '/Date(' and v[-2:] == ')/' and
-                    v[6:19].isdigit()
+                v[:6] == '/Date(' and v[-2:] == ')/' and v[6:19].isdigit()
                 else v for v in values]
             if all([isinstance(v, datetime) for v in newval]):
                 self.result[colname] = newval
-            elif any([n != v and not np_isnan(v) for n, v
-                    in zip(newval, values)]):
+            elif any([
+                    n != v and not np_isnan(v)
+                    for n, v in zip(newval, values)]):
                 self.result[colname] = [v.isoformat()[:-3] for v in newval]
 
     def get_caom_obsid(self):
@@ -240,7 +239,9 @@ class JwstFilteredQuery:
         '''
         if self.result is None:
             raise RuntimeError('execute query before getting CAOM obsid')
-        dataset = ['_'.join(f.split('_')[:-1]) for f in self.result['filename']]
+        dataset = [
+            '_'.join(f.split('_')[:-1])
+            for f in self.result['filename']]
         self._dataset = sorted(list(set(dataset)))
         service = 'Mast.Caom.Filtered'
         filters = [
@@ -266,6 +267,7 @@ class JwstFilteredQuery:
             self.result.show_in_browser(jsviewer=True)
         if self.caom_product_list:
             self.caom_product_list.browse(unique=unique)
+
 
 class CaomProductList:
     '''Get list of CAOM products for one or more CAOM product group IDs.
@@ -328,6 +330,7 @@ class CaomProductList:
             product_list = table_unique(product_list, keys='productFilename')
         product_list.show_in_browser(jsviewer=True)
 
+
 def mjd_from_time(time):
     '''Return modified Julian date equivalent to input time specification.
 
@@ -367,7 +370,7 @@ def mjd_from_time(time):
 
 
 def get_mast_api_token(mast_api_token=None, prompt=False):
-    '''Get MAST API token. Precedence is argument, environment, file, prompt.'''
+    '''Get MAST API token. Precedence: argument, environment, file, prompt.'''
     if not mast_api_token:
         mast_api_token = getenv('MAST_API_TOKEN')
     if not mast_api_token:
@@ -384,13 +387,14 @@ def get_mast_api_token(mast_api_token=None, prompt=False):
     if not mast_api_token and prompt:
         mast_api_token = getpass('Enter MAST API token: ')
     try:
-        assert(mast_api_token)
-        assert(isinstance(mast_api_token, str))
-        assert(len(mast_api_token) == 32)
-        assert(mast_api_token.isalnum())
+        assert mast_api_token
+        assert isinstance(mast_api_token, str)
+        assert len(mast_api_token) == 32
+        assert mast_api_token.isalnum()
         return mast_api_token
-    except AssertionError as e:
-        raise ValueError(f"MAST API token is not a string " \
+    except AssertionError:
+        raise ValueError(
+            f"MAST API token is not a string "
             f"with 32 alphanumeric characters: '{mast_api_token}'")
 
 
