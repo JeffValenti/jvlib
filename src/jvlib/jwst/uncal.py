@@ -29,7 +29,10 @@ class UncalData:
             "detector", "filter", "grating", "fxd_slit", "patt_num",
             "nints", "ngroups"]
         for key in pkeys:
-            self.__dict__[key] = self.phead[key]
+            try:
+                self.__dict__[key] = self.phead[key]
+            except KeyError:
+                self.__dict__[key] = None
         self.config = f"{self.detector}_{self.grating}_{self.filter}" \
             f"_{self.fxd_slit}_DP{self.patt_num}"
         self.ndim = self.xhead["naxis"]
