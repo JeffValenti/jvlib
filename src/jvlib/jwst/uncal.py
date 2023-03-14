@@ -57,12 +57,6 @@ class UncalData:
         group_diff = self.calc_group_diff(integ, rebase=rebase)
         return np_median(group_diff, axis=0)
 
-    def set_median_group_diff(self, rebase=True):
-        self.median_group_diff = []
-        for integ in range(self.nints):
-            self.median_group_diff.append(
-                self.calc_median_group_diff(integ, rebase=rebase))
-
     def close_file(self):
         """Close the FITS file, once access is no longer needed."""
         self.hdulist.close()
