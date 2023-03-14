@@ -6,7 +6,8 @@ from pathlib import Path
 from astropy.io.fits import open as fits_open
 from matplotlib.backends.backend_pdf import PdfPages
 from matplotlib.figure import Figure
-from numpy import argwhere, diff as np_diff, median as np_median, sum as np_sum
+from numpy import (
+    argwhere, diff as np_diff, median as np_median, sum as np_sum, transpose)
 from scipy.ndimage import median_filter
 
 from jvlib.util.obj import use_or_set_default
@@ -40,10 +41,14 @@ class UncalData:
     def load_integ_data(self, integ):
         """Load science data for specified integration from FITS file."""
         if self.ndim == 4:
-             return self.hdulist["sci"].data[integ, :, :, :].astype(float)
+             data = self.hdulist["sci"].data[integ, :, :, :].astype(float)
         else:
              assert integ == 0
-             return self.hdulist["sci"].data.astype(float)
+             data = self.hdulist["sci"].data.astype(float)
+        if data.shape[1] > data.shape[2]:
+             return transpose(data, [0, 2, 1])
+        else:
+             return data
 
     def calc_group_diff(self, integ, rebase=True):
         """Calculate difference between consecutive groups in integration."""
