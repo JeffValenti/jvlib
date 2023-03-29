@@ -4,10 +4,180 @@ from pathlib import Path
 from requests import get as requests_get
 from os import getenv
 
-from astropy.table import unique as table_unique
+from astropy.table import Column, unique as table_unique
 from astropy.time import Time
-from astroquery.mast import Mast
-from numpy import isnan as np_isnan
+from astroquery.mast import Mast, Observations
+from numpy import isnan as np_isnan, sum as np_sum
+
+
+class JwstProgramData:
+    '''Interface with MAST archive for specified JWST program.'''
+    def __init__(self, progid):
+        self.progid = int(progid)
+        self.datasets = Observations.query_criteria(
+            obs_collection='Jwst', proposal_id=progid)
+        self.files = Observations.get_product_list(self.datasets)
+        self.files = table_unique(self.files, keys='productFilename')
+        self.files['name'] = self.files['productFilename']
+        self._add_metadata()
+        self._set_valid_constraints()
+        self.set_constraints()
+
+    def _add_metadata(self):
+        '''Add useful metadata columns to table of files in MAST.'''
+        self._set_inst()
+        self._set_filetype()
+        self._set_obs()
+
+    def _force_list_containing_type(self, obj, elemtype):
+        '''Return a list containing elements with the specified type.'''
+        if obj is None:
+            return []
+        elif isinstance(obj, str):
+            return [elemtype(obj)]
+        try:
+            return [elemtype(value) for value in obj]
+        except TypeError:
+            return [elemtype(obj)]
+
+    def _infer_filetype(self, filename):
+        '''Return a filetype inferred from the specified filename.'''
+        stem, exten = filename.split('.')
+        suffix = stem.split('_')[-1]
+        if exten in ['jpg']:
+            return exten
+        elif '_gs-' in stem:
+            prefix = stem.split('_gs-')[1].split('_')[0]
+            return f'{prefix}_{suffix}'
+        else:
+            return suffix
+
+    def _set_filetype(self):
+        '''Set filetype based on filename.'''
+        self.files['filetype'] = [
+            self._infer_filetype(f) for f in self.files['productFilename']]
+
+    def _set_inst(self):
+        '''Set instrument based on filename and parent_obsid.'''
+        inst_names = dict(
+            gs='fgs', mir='mir', nis='nis', niriss='nis',
+            nrc='nrc', nircam='nrc', nrs='nrs', nirspec='nrs')
+        self.files['inst'] = Column([''] * len(self.files), dtype='object')
+        for file in self.files:
+            for substr in inst_names:
+                if substr in file['productFilename']:
+                    file['inst'] = inst_names[substr]
+        for file in self.files:
+            if file['inst'] != '':
+                continue
+            siblings = self.files['parent_obsid'] == file['parent_obsid']
+            inst = [i for i in self.files['inst'][siblings] if i != '']
+            if inst and all([i in [inst[0], 'fgs'] for i in inst]):
+                file['inst'] = inst[0]
+
+    def _set_obs(self):
+        '''Set observation number based on filename and parent_obsid.'''
+        prefix = f'jw{self.progid:05d}'
+        self.files['obs'] = [
+            int(f[7:10]) if f[:7] == prefix and f[7:10].isdecimal() else 0
+            for f in self.files['productFilename']]
+        for file in self.files:
+            if file['obs'] != 0:
+                continue
+            siblings = self.files['parent_obsid'] == file['parent_obsid']
+            obs = [o for o in self.files['obs'][siblings] if o != 0]
+            if obs and all([o == obs[0] for o in obs]):
+                file['obs'] = obs[0]
+
+    def _set_valid_constraints(self):
+        self.valid_inst = ['fgs', 'mir', 'nrc', 'nis', 'nrs']
+        self.valid_filetype = [
+            'acq1_cal', 'acq1_stream', 'acq1_uncal', 'acq2_cal',
+            'acq2_stream', 'acq2_uncal', 'asn', 'cal', 'calints',
+            'crfints', 'fg_cal', 'fg_stream', 'fg_uncal', 'id_cal',
+            'id_stream', 'id_uncal', 'jpg', 'pool', 'ramp', 'rate',
+            'rateints', 'track_cal', 'track_stream', 'track_uncal',
+            'uncal', 'whtlt', 'x1dints']
+
+    def _parse_constraint_string(self, constraint_string):
+        '''Parse string with comma-separated constraints.'''
+        instlist = None
+        obslist = None
+        filetypelist = None
+        constraint_list = [c.strip() for c in constraint_string.split(',')]
+        if constraint_list != ['']:
+            for constraint in constraint_list:
+                if constraint in self.valid_inst:
+                    if instlist:
+                        instlist.append(constraint)
+                    else:
+                        instlist = [constraint]
+                elif constraint in self.valid_filetype:
+                    if filetypelist:
+                        filetypelist.append(constraint)
+                    else:
+                        filetypelist = [constraint]
+                else:
+                    try:
+                        if obslist:
+                            obslist.append(int(constraint))
+                        else:
+                            obslist = [int(constraint)]
+                    except ValueError as e:
+                        raise Exception(
+                            f'unrecognized constraint: {constraint}')
+        return instlist, obslist, filetypelist
+
+    @property
+    def filenames(self):
+        '''Return lsit of filenames that satisfy constraints.'''
+        return [f for f in self.files['name'][self.subset]]
+
+    def apply_constraint_string(self, constraint_string):
+        '''Set inst, obs, and filetype constraints from constraint string.'''
+        inst, obs, filetype = self._parse_constraint_string(constraint_string)
+        self.set_constraints(inst=inst, obs=obs, filetype=filetype)
+
+    def browse_files(self):
+        '''Display self.files table in a browser window.'''
+        self.files[self.subset].show_in_browser(jsviewer=True)
+
+    def browse_datasets(self):
+        '''Display self.datasets table in a browser window.'''
+        self.datasets.show_in_browser(jsviewer=True)
+
+    def download_files(self, existing='keep', auth=True):
+        '''Download from MAST files that satisfy constraints.'''
+        for filename in self.filenames:
+            if existing == 'keep':
+                if Path(filename).is_file():
+                    print(f'keeping local {filename}')
+                    continue
+            elif existing == 'replace':
+                pass
+            else:
+                raise ValueError('existing={existing} is not valid')
+            print(f'downloading {filename}')
+            get_jwst_file(filename, auth=auth)
+
+    def set_constraints(self, inst=None, obs=None, filetype=None):
+        '''Set mask for self.files that satisfies specified criteria.'''
+        instlist = self._force_list_containing_type(inst, str)
+        obslist = self._force_list_containing_type(obs, int)
+        filetypelist = self._force_list_containing_type(filetype, str)
+        self.subset = [
+            True if (inst is None or f['inst'] in instlist)
+            and (obs is None or f['obs'] in obslist)
+            and (filetype is None or f['filetype'] in filetypelist)
+            else False for f in self.files]
+
+    def summarize(self, key):
+        '''Summarize MAST data holdings for the program by specified key.'''
+        table = self.files[key, 'size'][self.subset]
+        table['nfile'] = 1
+        grouped_table = table.group_by(key)
+        grouped_table = grouped_table[key, 'nfile', 'size']
+        return grouped_table.groups.aggregate(np_sum)
 
 
 class JwstFilteredQuery:
