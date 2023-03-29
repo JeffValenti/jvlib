@@ -7,7 +7,7 @@ from astropy.io.fits import open as fits_open
 from matplotlib.backends.backend_pdf import PdfPages
 from matplotlib.figure import Figure
 from numpy import (
-    argwhere, diff as np_diff, median as np_median, sum as np_sum, transpose)
+    argwhere, diff as np_diff, flip, median as np_median, sum as np_sum, swapaxes)
 from scipy.ndimage import median_filter
 
 from jvlib.util.obj import use_or_set_default
@@ -28,15 +28,15 @@ class UncalData:
         """Read expoure metadata from FITS primary header."""
         pkeys = [
             "detector", "filter", "grating", "fxd_slit", "patt_num",
-            "nints", "ngroups"]
+            "nints", "ngroups", "subarray"]
         for key in pkeys:
             try:
                 self.__dict__[key] = self.phead[key]
             except KeyError:
                 self.__dict__[key] = None
+        self.ndim = self.xhead["naxis"]
         self.config = f"{self.detector}_{self.grating}_{self.filter}" \
             f"_{self.fxd_slit}_DP{self.patt_num}"
-        self.ndim = self.xhead["naxis"]
 
     def load_integ_data(self, integ):
         """Load science data for specified integration from FITS file."""
@@ -45,10 +45,10 @@ class UncalData:
         else:
              assert integ == 0
              data = self.hdulist["sci"].data.astype(float)
-        if data.shape[1] > data.shape[2]:
-             return transpose(data, [0, 2, 1])
+        if self.subarray == "SLITLESSPRISM":
+            return flip(swapaxes(data, 1, 2), 2)
         else:
-             return data
+            return data
 
     def calc_group_diff(self, integ, rebase=True):
         """Calculate difference between consecutive groups in integration."""
@@ -57,7 +57,8 @@ class UncalData:
         if rebase:
             for igroup in range(self.ngroups - 1):
                 image = group_diff[igroup, :, :]
-                group_diff[igroup, :, :] = image - np_median(image, axis=0)
+                for i in range(image.shape[0]):
+                     group_diff[igroup, :, :] = image - np_median(image[i, :])
         return group_diff
 
     def calc_median_group_diff(self, integ, rebase=True):
