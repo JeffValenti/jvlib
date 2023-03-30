@@ -1,5 +1,3 @@
-#!/usr/bin/env python
-
 from math import ceil, sqrt
 from pathlib import Path
 
@@ -7,7 +5,7 @@ from astropy.io.fits import open as fits_open
 from matplotlib.backends.backend_pdf import PdfPages
 from matplotlib.figure import Figure
 from numpy import (
-    argwhere, diff as np_diff, flip, median as np_median, sum as np_sum, swapaxes)
+    diff as np_diff, flip, median as np_median, sum as np_sum, swapaxes)
 from scipy.ndimage import median_filter
 
 from jvlib.util.obj import use_or_set_default
