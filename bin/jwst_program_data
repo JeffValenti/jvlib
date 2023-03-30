@@ -11,29 +11,20 @@ parser = ArgumentParser(
 parser.add_argument(
     'progid', type=int, help='JWST program ID')
 parser.add_argument(
-    '-cs', '--constraint-string',
-    help='subset of allowed instruments, observations, and/or filetypes')
+    '-c', '--constraint',
+    help='constraint on instruments, observations, and/or filetypes')
 parser.add_argument(
-    '-bd', '--browse-datasets', action='store_true',
-    help='show in browser window datasets that satisfy constraints')
+    '-b', '--browse', action='store_true',
+    help='show in browser datasets and files that satisfy constraints')
 parser.add_argument(
-    '-bf', '--browse_files', action='store_true',
-    help='show in browser window files that satisfy constraints')
+    '-d', '--download', action='store_true',
+    help='download to current directory files that satisfy constraints')
 parser.add_argument(
-    '-df', '--download_files', action='store_true',
-    help='download files that satisfy constraints')
+    '-l', '--list', action='store_true',
+    help='list to terminal files that satisfy constraints')
 parser.add_argument(
-    '-lf', '--list_files', action='store_true',
-    help='list to terminal filenames that satisfy constraints')
-parser.add_argument(
-    '-si', '--summarize_instruments', action='store_true',
-    help='summarize by instrument files that satisfy constraints')
-parser.add_argument(
-    '-so', '--summarize_observations', action='store_true',
-    help='summarize by observation files that satisfy constraints')
-parser.add_argument(
-    '-st', '--summarize_types', action='store_true',
-    help='summarize by type files that satisfy constraints')
+    '-s', '--summarize', action='store_true',
+    help='summarize in browser files that satisfy constraints')
 
 # Parse arguments
 args = parser.parse_args()
@@ -42,31 +33,28 @@ args = parser.parse_args()
 progdata = JwstProgramData(args.progid)
 
 # Apply constraints.
-if args.constraint_string:
-    progdata.apply_constraint_string(args.constraint_string)
+if args.constraint:
+    progdata.apply_constraint_string(args.constraint)
 
 # List filenames.
-if args.list_files:
+if args.list:
     for filename in progdata.filenames:
         print(filename)
 
 # Download files.
-if args.download_files:
+if args.download:
     progdata.download_files()
 
 # Browse results.
-if args.browse_datasets:
+if args.browse:
     progdata.browse_datasets()
-if args.browse_files:
     progdata.browse_files()
 
 # Summarize files.
-if args.summarize_instruments:
-    summary = progdata.summarize('inst')
-    summary.show_in_browser(jsviewer=True)
-if args.summarize_observations:
-    summary = progdata.summarize('obs')
-    summary.show_in_browser(jsviewer=True)
-if args.summarize_types:
-    summary = progdata.summarize('filetype')
-    summary.show_in_browser(jsviewer=True)
+if args.summarize:
+    filetype_summary = progdata.summarize('filetype')
+    filetype_summary.show_in_browser(jsviewer=True)
+    obs_summary = progdata.summarize('obs')
+    obs_summary.show_in_browser(jsviewer=True)
+    inst_summary = progdata.summarize('inst')
+    inst_summary.show_in_browser(jsviewer=True)
