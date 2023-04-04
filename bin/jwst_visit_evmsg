@@ -1,0 +1,63 @@
+#!/usr/bin/env python
+
+from argparse import ArgumentParser
+from datetime import datetime, time, timedelta
+
+from jvlib.mast.engdb import EventMessages
+
+# Configure argument parser.
+parser = ArgumentParser(
+    prog = 'jwst_visit_evmsg',
+    description = 'Retrieve onboard script event messages for a JWST visit')
+parser.add_argument(
+    'visit_id', type=int,
+    help='Visit ID, e.g., 2288003001')
+parser.add_argument(
+    'start_date', type=datetime.fromisoformat,
+    help='Earliest UTC date to search, e.g. 2023-04-01')
+parser.add_argument(
+    'end_date', type=datetime.fromisoformat,
+    help='Latest UTC date to search, e.g., 2023-04-05')
+
+# Parse arguments.
+# Pad program ID with leading zeroes to yield 5 digits.
+# Add one day to end datetime, if time was not specified.
+args = parser.parse_args()
+visitid = f'{args.visit_id:011d}'
+dtstart = args.start_date
+dtend = args.end_date
+if dtend == datetime.combine(dtend.date(), time(0, 0, 0)):
+    dtend += timedelta(days=1)
+
+# Fetch event messages from DMS engineering database.
+eventmessages = EventMessages(dtstart, dtend)
+if len(eventmessages) == 0:
+    exit('no event messages for specified date range')
+dtfirstfound = f'{eventmessages.time[0]}'[:-3].replace(' ', 'T')
+dtlastfound = f'{eventmessages.time[-1]}'[:-3].replace(' ', 'T')
+print(f'Found messages between {dtfirstfound} and {dtlastfound}')
+
+# Search for event messages that demarcate the start and end of visit.
+istart = None
+iend = None
+for i, value in enumerate(eventmessages.value):
+    if f'VISIT V{visitid} STARTED' in value:
+        istart = i
+    if f'VISIT V{visitid} ENDED' in value:
+        iend = i + 1
+
+# Handle case where start and/or end of visit message not found.
+if not istart and not iend:
+    exit(f'Visit start message not found. Visit end message not found.')
+if not istart:
+    print('Visit start message not found. Starting at first event message.')
+    istart = 0
+if not iend:
+    print('Visit end message not found. Ending at last event message.')
+    iend = -1
+
+# Print time and value of event messages for the specified visit. 
+out = [f'{t} | {v}' for t, v in zip(
+    eventmessages.time[istart:iend],
+    eventmessages.value[istart:iend])]
+print('\n'.join(out))
