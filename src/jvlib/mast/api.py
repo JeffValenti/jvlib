@@ -96,8 +96,8 @@ class JwstProgramData:
             'acq2_stream', 'acq2_uncal', 'asn', 'cal', 'calints',
             'crfints', 'fg_cal', 'fg_stream', 'fg_uncal', 'id_cal',
             'id_stream', 'id_uncal', 'jpg', 'pool', 'ramp', 'rate',
-            'rateints', 'track_cal', 'track_stream', 'track_uncal',
-            'uncal', 'whtlt', 'x1dints']
+            'rateints', 's2d', 'track_cal', 'track_stream',
+            'track_uncal', 'uncal', 'whtlt', 'x1d', 'x1dints']
 
     def _parse_constraint_string(self, constraint_string):
         '''Parse string with comma-separated constraints.'''
