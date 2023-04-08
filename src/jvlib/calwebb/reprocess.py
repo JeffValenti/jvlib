@@ -21,6 +21,7 @@ class CalwebbReprocessExposure:
         self.symlink = self._create_link_to_inputfile()
         self.logcfgpath, self.logpath = self._create_logcfg_file()
         self.scriptpath = self._create_python_script()
+        self.nextstage = self._determine_next_stage()
 
     def _create_link_to_inputfile(self):
         '''Create symbolic link to input file, unless file is in outdir.'''
@@ -63,6 +64,15 @@ class CalwebbReprocessExposure:
             textio.write(text)
         scriptpath.chmod(0o750)
         return scriptpath
+
+    def _determine_next_stage()
+        '''If input is uncal, return pipeline to handle next stage.'''
+        if self.suffix == 'uncal':
+            return {'rate': self.pipeline, 'rateints': self.pipeline}
+        elif self.suffix in ['rate', 'rateints']:
+            return {}
+        else:
+            raise ValueError(f'next stage unknown for suffix={self.suffix}')
 
     def _select_pipeline(self):
         '''Determine which pipeline to invoke when reprocessing input file.'''
