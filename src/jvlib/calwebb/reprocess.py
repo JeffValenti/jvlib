@@ -15,13 +15,13 @@ class CalwebbReprocessExposure:
         self.inputpath = Path(inputfile).expanduser().absolute()
         self.outdir = Path(outdir).absolute()
         self.loglevel = loglevel
-        self.prefix, self.suffix = self.inputpath.name.rsplit('_', 1)
+        self.prefix, self.suffix = self.inputpath.stem.rsplit('_', 1)
         self.exptype, self.pipeline = self._select_pipeline()
         self.outdir.mkdir(mode=0o750, parents=True, exist_ok=True)
         self.symlink = self._create_link_to_inputfile()
         self.logcfgpath, self.logpath = self._create_logcfg_file()
         self.scriptpath = self._create_python_script()
-        self.nextstage = self._determine_next_stage()
+        self.nextstageinputs = self._predict_next_stage_inputs()
 
     def _create_link_to_inputfile(self):
         '''Create symbolic link to input file, unless file is in outdir.'''
@@ -65,12 +65,14 @@ class CalwebbReprocessExposure:
         scriptpath.chmod(0o750)
         return scriptpath
 
-    def _determine_next_stage()
-        '''If input is uncal, return pipeline to handle next stage.'''
+    def _predict_next_stage_inputs(self):
+        '''Predict input files (if any) for next calwebb pipeline stage.'''
         if self.suffix == 'uncal':
-            return {'rate': self.pipeline, 'rateints': self.pipeline}
+            return [
+                f'{self.outdir}/{self.prefix}_{suffix}.fits'
+                for suffix in ['rate', 'rateints']]
         elif self.suffix in ['rate', 'rateints']:
-            return {}
+            return []
         else:
             raise ValueError(f'next stage unknown for suffix={self.suffix}')
 
