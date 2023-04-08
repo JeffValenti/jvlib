@@ -1,4 +1,5 @@
 from pathlib import Path
+from subprocess import run as subprocess_run
 
 from astropy.io.fits import open as fits_open
 
@@ -22,6 +23,13 @@ class CalwebbReprocessExposure:
         self.logcfgpath, self.logpath = self._create_logcfg_file()
         self.scriptpath = self._create_python_script()
         self.nextstageinputs = self._predict_next_stage_inputs()
+
+    def run(self, condaenv):
+        '''Run the reprocessing script in the specified conda environment.'''
+        cmdstr = (
+            f'conda run -n {condaenv} --cwd {self.outdir} '
+            f'python {self.scriptpath}')
+        subprocess_run(cmdstr, shell=True, check=True)
 
     def _create_link_to_inputfile(self):
         '''Create symbolic link to input file, unless file is in outdir.'''
