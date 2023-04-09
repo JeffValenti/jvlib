@@ -1,0 +1,35 @@
+#!/usr/bin/env python
+
+from argparse import ArgumentParser
+
+from jvlib.calwebb.reprocess import CalwebbReprocessExposures
+
+
+# Configure argument parser.
+parser = ArgumentParser(
+    prog = 'calwebb_reprocess_exposures',
+    description = 'Reprocess JWST exposures with calwebb in conda environment')
+parser.add_argument(
+    'condaenv',
+    help='Name of conda envirnment to use when reprocessing')
+parser.add_argument(
+    'pathspec',
+    nargs='*',
+    help='quoted path specification or path list expanded by shell')
+parser.add_argument(
+    '-outdir',
+    default='.',
+    help='Directory where reprocessing files will be saved')
+parser.add_argument(
+    '-loglevel',
+    choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
+    default='DEBUG',
+    help='Level of detail to include in calwebb log file')
+
+# Parse arguments
+args = parser.parse_args()
+
+# Reprocess specified input files in specified conda environment.
+repro = CalwebbReprocessExposures(
+    args.condaenv, args.pathspec, outdir=args.outdir, loglevel=args.loglevel)
+repro.reprocess()
