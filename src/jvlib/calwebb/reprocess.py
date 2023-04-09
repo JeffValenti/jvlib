@@ -3,9 +3,48 @@ from subprocess import run as subprocess_run
 
 from astropy.io.fits import open as fits_open
 
+from jvlib.util.path import pathlist
 
-class CalwebbReprocessExposure:
-    '''Manage a calwebb job to reprocess an exposure.
+
+class CalwebbReprocessExposures:
+    '''Reprocess the specified input exposure files with calwebb pipeline.'''
+    def __init__(self, condaenv, pathspec, outdir='.', loglevel='DEBUG'):
+        self.condaenv = condaenv
+        self.pathspec = pathspec
+        self.outdir = Path(outdir).expanduser().absolute()
+        self.loglevel = loglevel
+        self.paths = pathlist(pathspec)
+        self._check_filenames()
+
+    def reprocess(self):
+        '''Loop through paths. Setup and run reprocessing job.'''
+        print(f'condaenv = {self.condaenv}')
+        print(f'outdir = {self.outdir}')
+        for path in self.paths:
+            print(f'inputfile = {path.name}')
+            reprocess = CalwebbReprocessExposureSetup(
+                path, outdir=self.outdir, loglevel=self.loglevel)
+            reprocess.run(self.condaenv)
+            for nextpath in reprocess.nextpath:
+                print(f'    nextpath = {nextpath.name}')
+                nextstage = CalwebbReprocessExposureSetup(
+                    nextpath, outdir=self.outdir, loglevel=self.loglevel)
+                nextstage.run(self.condaenv)
+
+    def _check_filenames(self):
+        '''Check that input filenames have expected format.'''
+        badpaths = [
+            path for path in self.paths
+            if path.stem[:2] != 'jw'
+            or not path.stem[2:13].isdigit()
+            or path.stem.rsplit('_', 1)[1] not in ['uncal', 'rate', 'rateints']
+            or path.suffix != '.fits']
+        if badpaths:
+            badnames = ','.join([path.name for path in badpaths])
+            raise ValueError(f'Unexpected input filenames: {badnames}')
+
+class CalwebbReprocessExposureSetup:
+    '''Create directory to reprocess an input exposure file with calwebb.
 
     Arguments:
         inputpath (str, Path) _uncal.fits, _rate.fits, or _rateints.fits file
@@ -14,7 +53,7 @@ class CalwebbReprocessExposure:
     '''
     def __init__(self, inputfile, outdir='.', loglevel='DEBUG'):
         self.inputpath = Path(inputfile).expanduser().absolute()
-        self.outdir = Path(outdir).absolute()
+        self.outdir = Path(outdir).expanduser().absolute()
         self.loglevel = loglevel
         self.prefix, self.suffix = self.inputpath.stem.rsplit('_', 1)
         self.exptype, self.pipeline = self._select_pipeline()
@@ -22,7 +61,7 @@ class CalwebbReprocessExposure:
         self.symlink = self._create_link_to_inputfile()
         self.logcfgpath, self.logpath = self._create_logcfg_file()
         self.scriptpath = self._create_python_script()
-        self.nextstageinputs = self._predict_next_stage_inputs()
+        self.nextpath = self._predict_next_stage_inputs()
 
     def run(self, condaenv):
         '''Run the reprocessing script in the specified conda environment.'''
@@ -77,7 +116,7 @@ class CalwebbReprocessExposure:
         '''Predict input files (if any) for next calwebb pipeline stage.'''
         if self.suffix == 'uncal':
             return [
-                f'{self.outdir}/{self.prefix}_{suffix}.fits'
+                Path(f'{self.outdir}/{self.prefix}_{suffix}.fits')
                 for suffix in ['rate', 'rateints']]
         elif self.suffix in ['rate', 'rateints']:
             return []
