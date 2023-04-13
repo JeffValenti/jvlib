@@ -56,7 +56,7 @@ class CalwebbReprocessExposureSetup:
         self.outdir = Path(outdir).expanduser().absolute()
         self.loglevel = loglevel
         self.prefix, self.suffix = self.inputpath.stem.rsplit('_', 1)
-        self.exptype, self.pipeline = self._select_pipeline()
+        self.exptype, self.nints, self.pipeline = self._select_pipeline()
         self.outdir.mkdir(mode=0o750, parents=True, exist_ok=True)
         self.symlink = self._create_link_to_inputfile()
         self.logcfgpath, self.logpath = self._create_logcfg_file()
@@ -115,9 +115,12 @@ class CalwebbReprocessExposureSetup:
     def _predict_next_stage_inputs(self):
         '''Predict input files (if any) for next calwebb pipeline stage.'''
         if self.suffix == 'uncal':
-            return [
-                Path(f'{self.outdir}/{self.prefix}_{suffix}.fits')
-                for suffix in ['rate', 'rateints']]
+            if self.nints == 1:
+                return [Path(f'{self.outdir}/{self.prefix}_rate.fits')]
+            else:
+                return [
+                    Path(f'{self.outdir}/{self.prefix}_{suffix}.fits')
+                    for suffix in ['rate', 'rateints']]
         elif self.suffix in ['rate', 'rateints']:
             return []
         else:
@@ -128,13 +131,14 @@ class CalwebbReprocessExposureSetup:
         try:
             with fits_open(self.inputpath) as hdulist:
                 exptype = hdulist['primary'].header['exp_type']
+                nints = hdulist['primary'].header['nints']
         except FileNotFoundError as e:
             raise Exception(f'Input file not found: {self.inputpath}')
         if self.suffix == 'uncal':
-            return exptype, 'Detector1'
-        elif exptype in ['NRS_WATA', 'NRS_TACONFIRM']:
-            return exptype, 'Image2'
-        elif exptype in ['NRS_FIXEDSLIT']:
-            return exptype, 'Spec2'
+            return exptype, nints, 'Detector1'
+        elif exptype in ['NRS_WATA', 'NRS_TACONFIRM', 'MIR_TACQ', 'MIR_IMAGE']:
+            return exptype, nints, 'Image2'
+        elif exptype in ['NRS_FIXEDSLIT', 'MIR_MRS']:
+            return exptype, nints, 'Spec2'
         else:
             raise ValueError(f'No pipeline for exptype={exptype}')
