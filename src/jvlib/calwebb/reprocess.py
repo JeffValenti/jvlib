@@ -6,6 +6,141 @@ from astropy.io.fits import open as fits_open
 from jvlib.util.path import pathlist
 
 
+class CalwebbReprocessAssociations:
+    '''Reprocess JWST associations with calwebb in conda environment.'''
+    def __init__(
+            self, condaenv, jsonspec, indir='.', outdir='.', loglevel='DEBUG'):
+        self.condaenv = condaenv
+        self.jsonspec = jsonspec
+        self.indir = Path(indir).expanduser().absolute()
+        self.outdir = Path(outdir).expanduser().absolute()
+        self.loglevel = loglevel
+        self.jsonpaths = pathlist(jsonspec)
+        self._check_filenames()
+
+    def reprocess(self):
+        '''Loop through paths. Setup and run reprocessing job.'''
+        print(f'condaenv = {self.condaenv}')
+        print(f'outdir = {self.outdir}')
+        for jsonpath in self.jsonpaths:
+            print(f'inputfile = {jsonpath.name}')
+            reprocess = CalwebbReprocessAssociationSetup(
+                jsonpath, indir=self.indir, outdir=self.outdir,
+                loglevel=self.loglevel)
+            reprocess.run(self.condaenv)
+
+    def _check_filenames(self):
+        '''Check that input filenames have expected format.'''
+        badpaths = [
+            path for path in self.jsonpaths if path[-9:] != '_asn.json']
+        if badpaths:
+            badnames = ','.join([path.name for path in badpaths])
+            raise ValueError(f'Unexpected input _asn.json files: {badnames}')
+
+class CalwebbReprocessAssociationSetup:
+    '''Create directory to reprocess an input association file with calwebb.
+
+    Arguments:
+        jsonpath (str, Path) _asn.json file
+        indir (str, Path) directory containing all input data. Default is CWD
+        outdir (str, Path) directory to store all output. Default is CWD
+        loglevel (str) DEBUG (default), INFO, WARNING, ERROR, or CRITICAL
+    '''
+    def __init__(self, jsonpath, indir='.', outdir='.', loglevel='DEBUG'):
+        self.jsonpath = Path(jsonpath).expanduser().absolute()
+        self.indir = Path(inputfile).expanduser().absolute()
+        self.outdir = Path(outdir).expanduser().absolute()
+        self.loglevel = loglevel
+        self.assoc = JwstAssociationFile(self.jsonpath)
+        self.outdir.mkdir(mode=0o750, parents=True, exist_ok=True)
+        exit()
+
+        self.exptype, self.nints, self.pipeline = self._select_pipeline()
+        self.symlink = self._create_link_to_inputfile()
+        self.logcfgpath, self.logpath = self._create_logcfg_file()
+        self.scriptpath = self._create_python_script()
+        self.nextpath = self._predict_next_stage_inputs()
+
+    def run(self, condaenv):
+        '''Run the reprocessing script in the specified conda environment.'''
+        cmdstr = (
+            f'conda run -n {condaenv} --cwd {self.outdir} '
+            f'python {self.scriptpath}')
+        subprocess_run(cmdstr, shell=True, check=True)
+
+    def _create_link_to_inputfile(self):
+        '''Create symbolic link to input file, unless file is in outdir.'''
+        if self.inputpath.parent == self.outdir:
+            return self.inputpath
+        linkpath = self.outdir / self.inputpath.name
+        if linkpath.exists():
+            assert linkpath.is_symlink()
+            linkpath.unlink()
+        linkpath.symlink_to(self.inputpath)
+        return linkpath
+
+    def _create_logcfg_file(self):
+        '''Create file in outdir that configures calwebb logging.'''
+        stem = self.inputpath.stem
+        logcfgpath = self.outdir / f'{stem}.cfglog'
+        logpath = self.outdir / f'{stem}.log'
+        text = (
+            f'[*]\n'
+            f'handler = file:{logpath}\n'
+            f'level = {self.loglevel}\n')
+        with open(logcfgpath, 'w') as textio:
+            textio.write(text)
+        return logcfgpath, logpath
+
+    def _create_python_script(self):
+        '''Create python script to execute calwebb reprocessing job.'''
+        assert self.symlink.parent == self.outdir
+        assert self.logcfgpath.parent == self.outdir
+        text = (
+            f'#!/usr/bin/env python\n\n'
+            f'from jwst.pipeline import {self.pipeline}Pipeline\n\n'
+            f'outdir = "{self.outdir}"\n'
+            f'result = {self.pipeline}Pipeline.call(\n'
+            f'    f"{{outdir}}/{self.symlink.name}",\n'
+            f'    logcfg=f"{{outdir}}/{self.logcfgpath.name}",\n'
+            f'    save_results=True)\n')
+        scriptpath = self.outdir / f'{self.inputpath.stem}.py'
+        with open(scriptpath, 'w') as textio:
+            textio.write(text)
+        scriptpath.chmod(0o750)
+        return scriptpath
+
+    def _predict_next_stage_inputs(self):
+        '''Predict input files (if any) for next calwebb pipeline stage.'''
+        if self.suffix == 'uncal':
+            if self.nints == 1:
+                return [Path(f'{self.outdir}/{self.prefix}_rate.fits')]
+            else:
+                return [
+                    Path(f'{self.outdir}/{self.prefix}_{suffix}.fits')
+                    for suffix in ['rate', 'rateints']]
+        elif self.suffix in ['rate', 'rateints']:
+            return []
+        else:
+            raise ValueError(f'next stage unknown for suffix={self.suffix}')
+
+    def _select_pipeline(self):
+        '''Determine which pipeline to invoke when reprocessing input file.'''
+        try:
+            with fits_open(self.inputpath) as hdulist:
+                exptype = hdulist['primary'].header['exp_type']
+                nints = hdulist['primary'].header['nints']
+        except FileNotFoundError as e:
+            raise Exception(f'Input file not found: {self.inputpath}')
+        if self.suffix == 'uncal':
+            return exptype, nints, 'Detector1'
+        elif exptype in ['NRS_WATA', 'NRS_TACONFIRM', 'MIR_TACQ', 'MIR_IMAGE']:
+            return exptype, nints, 'Image2'
+        elif exptype in ['NRS_FIXEDSLIT', 'MIR_MRS']:
+            return exptype, nints, 'Spec2'
+        else:
+            raise ValueError(f'No pipeline for exptype={exptype}')
+
 class CalwebbReprocessExposures:
     '''Reprocess the specified input exposure files with calwebb pipeline.'''
     def __init__(self, condaenv, pathspec, outdir='.', loglevel='DEBUG'):
