@@ -1,9 +1,11 @@
 from pathlib import Path
+from shutil import copy
 from subprocess import run as subprocess_run
 
 from astropy.io.fits import open as fits_open
 
 from jvlib.util.path import pathlist
+from jvlib.calwebb.assoc import JwstAssociationInfo
 
 
 class CalwebbReprocessAssociations:
@@ -12,30 +14,34 @@ class CalwebbReprocessAssociations:
             self, condaenv, jsonspec, indir='.', outdir='.', loglevel='DEBUG'):
         self.condaenv = condaenv
         self.jsonspec = jsonspec
-        self.indir = Path(indir).expanduser().absolute()
-        self.outdir = Path(outdir).expanduser().absolute()
+        self.indir = Path(indir).expanduser().absolute().resolve()
+        self.outdir = Path(outdir).expanduser().absolute().resolve()
         self.loglevel = loglevel
         self.jsonpaths = pathlist(jsonspec)
+        if not self.jsonpaths:
+            raise FileNotFoundError(f'No files match jsonspec: {jsonspec}')
         self._check_filenames()
 
     def reprocess(self):
         '''Loop through paths. Setup and run reprocessing job.'''
         print(f'condaenv = {self.condaenv}')
-        print(f'outdir = {self.outdir}')
+        print(f'indir = {self.indir}')
+        print(f'loglevel = {self.loglevel}')
         for jsonpath in self.jsonpaths:
-            print(f'inputfile = {jsonpath.name}')
+            print(f'jsonfile = {jsonpath.name}')
             reprocess = CalwebbReprocessAssociationSetup(
                 jsonpath, indir=self.indir, outdir=self.outdir,
                 loglevel=self.loglevel)
+            print(f'dir = {reprocess.dir}')
             reprocess.run(self.condaenv)
 
     def _check_filenames(self):
         '''Check that input filenames have expected format.'''
         badpaths = [
-            path for path in self.jsonpaths if path[-9:] != '_asn.json']
+            path for path in self.jsonpaths if path.name[-9:] != '_asn.json']
         if badpaths:
             badnames = ','.join([path.name for path in badpaths])
-            raise ValueError(f'Unexpected input _asn.json files: {badnames}')
+            raise ValueError(f'Bad suffix for jsonspec files: {badnames}')
 
 class CalwebbReprocessAssociationSetup:
     '''Create directory to reprocess an input association file with calwebb.
@@ -46,44 +52,49 @@ class CalwebbReprocessAssociationSetup:
         outdir (str, Path) directory to store all output. Default is CWD
         loglevel (str) DEBUG (default), INFO, WARNING, ERROR, or CRITICAL
     '''
-    def __init__(self, jsonpath, indir='.', outdir='.', loglevel='DEBUG'):
-        self.jsonpath = Path(jsonpath).expanduser().absolute()
-        self.indir = Path(inputfile).expanduser().absolute()
+    def __init__(self, injson, indir='.', outdir='.', loglevel='DEBUG'):
+        self.injson = Path(injson).expanduser().absolute()
+        self.indir = Path(indir).expanduser().absolute()
         self.outdir = Path(outdir).expanduser().absolute()
         self.loglevel = loglevel
-        self.assoc = JwstAssociationFile(self.jsonpath)
-        self.outdir.mkdir(mode=0o750, parents=True, exist_ok=True)
-        exit()
-
-        self.exptype, self.nints, self.pipeline = self._select_pipeline()
-        self.symlink = self._create_link_to_inputfile()
+        self.name = self.injson.stem
+        self.dir = self.outdir / self.name
+        self.dir.mkdir(mode=0o750, parents=True, exist_ok=True)
+        self.json = copy(self.injson, self.dir / self.injson.name)
+        self.info = JwstAssociationInfo(self.json)
+        self.pipeline = self.info.pipeline
+        self.members = self._create_link_to_members()
         self.logcfgpath, self.logpath = self._create_logcfg_file()
         self.scriptpath = self._create_python_script()
-        self.nextpath = self._predict_next_stage_inputs()
 
     def run(self, condaenv):
         '''Run the reprocessing script in the specified conda environment.'''
         cmdstr = (
-            f'conda run -n {condaenv} --cwd {self.outdir} '
+            f'conda run -n {condaenv} --cwd {self.dir} '
             f'python {self.scriptpath}')
         subprocess_run(cmdstr, shell=True, check=True)
 
-    def _create_link_to_inputfile(self):
-        '''Create symbolic link to input file, unless file is in outdir.'''
-        if self.inputpath.parent == self.outdir:
-            return self.inputpath
-        linkpath = self.outdir / self.inputpath.name
-        if linkpath.exists():
-            assert linkpath.is_symlink()
-            linkpath.unlink()
-        linkpath.symlink_to(self.inputpath)
-        return linkpath
+    def _create_link_to_members(self):
+        '''Create symbolic link to members, unless file is in dir.'''
+        linkpaths = []
+        for member in self.info.members:
+            memberpath = self.indir / member
+            if not memberpath.is_file():
+                raise FileNotFoundError(f'Member not found: {memberpath}')
+            linkpath = self.dir / member
+            if linkpath != memberpath:
+                if linkpath.is_symlink():
+                    linkpath.unlink()
+                if linkpath.is_file():
+                    raise Exception(f'Member already exists: {linkpath}')
+                linkpath.symlink_to(memberpath)
+            linkpaths.append(linkpath)
+        return linkpaths
 
     def _create_logcfg_file(self):
-        '''Create file in outdir that configures calwebb logging.'''
-        stem = self.inputpath.stem
-        logcfgpath = self.outdir / f'{stem}.cfglog'
-        logpath = self.outdir / f'{stem}.log'
+        '''Create file in dir that configures calwebb logging.'''
+        logcfgpath = self.dir / f'{self.name}.cfglog'
+        logpath = self.dir / f'{self.name}.log'
         text = (
             f'[*]\n'
             f'handler = file:{logpath}\n'
@@ -94,52 +105,23 @@ class CalwebbReprocessAssociationSetup:
 
     def _create_python_script(self):
         '''Create python script to execute calwebb reprocessing job.'''
-        assert self.symlink.parent == self.outdir
-        assert self.logcfgpath.parent == self.outdir
+        for member in self.members:
+            assert member.parent == self.dir
+        assert self.logcfgpath.parent == self.dir
         text = (
             f'#!/usr/bin/env python\n\n'
-            f'from jwst.pipeline import {self.pipeline}Pipeline\n\n'
-            f'outdir = "{self.outdir}"\n'
-            f'result = {self.pipeline}Pipeline.call(\n'
-            f'    f"{{outdir}}/{self.symlink.name}",\n'
+            f'from jwst.pipeline import {self.pipeline}\n\n'
+            f'outdir = "{self.dir}"\n'
+            f'result = {self.pipeline}.call(\n'
+            f'    f"{{outdir}}/{self.json.name}",\n'
             f'    logcfg=f"{{outdir}}/{self.logcfgpath.name}",\n'
             f'    save_results=True)\n')
-        scriptpath = self.outdir / f'{self.inputpath.stem}.py'
+        scriptpath = self.dir / f'{self.name}.py'
         with open(scriptpath, 'w') as textio:
             textio.write(text)
         scriptpath.chmod(0o750)
         return scriptpath
 
-    def _predict_next_stage_inputs(self):
-        '''Predict input files (if any) for next calwebb pipeline stage.'''
-        if self.suffix == 'uncal':
-            if self.nints == 1:
-                return [Path(f'{self.outdir}/{self.prefix}_rate.fits')]
-            else:
-                return [
-                    Path(f'{self.outdir}/{self.prefix}_{suffix}.fits')
-                    for suffix in ['rate', 'rateints']]
-        elif self.suffix in ['rate', 'rateints']:
-            return []
-        else:
-            raise ValueError(f'next stage unknown for suffix={self.suffix}')
-
-    def _select_pipeline(self):
-        '''Determine which pipeline to invoke when reprocessing input file.'''
-        try:
-            with fits_open(self.inputpath) as hdulist:
-                exptype = hdulist['primary'].header['exp_type']
-                nints = hdulist['primary'].header['nints']
-        except FileNotFoundError as e:
-            raise Exception(f'Input file not found: {self.inputpath}')
-        if self.suffix == 'uncal':
-            return exptype, nints, 'Detector1'
-        elif exptype in ['NRS_WATA', 'NRS_TACONFIRM', 'MIR_TACQ', 'MIR_IMAGE']:
-            return exptype, nints, 'Image2'
-        elif exptype in ['NRS_FIXEDSLIT', 'MIR_MRS']:
-            return exptype, nints, 'Spec2'
-        else:
-            raise ValueError(f'No pipeline for exptype={exptype}')
 
 class CalwebbReprocessExposures:
     '''Reprocess the specified input exposure files with calwebb pipeline.'''

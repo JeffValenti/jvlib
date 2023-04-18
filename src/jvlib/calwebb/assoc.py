@@ -1,8 +1,8 @@
 from json import load as json_load
 
 
-class JwstAssociationFile:
-    '''Represent contents of a JWST associations file (_asn.json).'''
+class JwstAssociationInfo:
+    '''Information from a JWST association file (_asn.json).'''
     def __init__(self, path):
         self.filename = path.name
         with open(path) as fp:
@@ -12,10 +12,10 @@ class JwstAssociationFile:
         self.pipeline = f'{self.asn_type.title()}Pipeline'
 
     @property
-    def expnames(self):
+    def members(self):
         '''Members of this association.'''
-        expnames = []
+        members = []
         for product in self.data['products']:
             for member in product['members']:
-                expnames.append(member['expname'])
-        return sorted(set(expnames))
+                members.append(member['expname'])
+        return sorted(set(members))
