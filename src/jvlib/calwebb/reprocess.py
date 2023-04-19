@@ -136,6 +136,7 @@ class CalwebbReprocessExposures:
         '''Loop through paths. Setup and run reprocessing job.'''
         print(f'condaenv = {self.condaenv}')
         print(f'outdir = {self.outdir}')
+        print(f'loglevel = {self.loglevel}')
         for path in self.paths:
             print(f'inputfile = {path.name}')
             reprocess = CalwebbReprocessExposureSetup(
