@@ -26,13 +26,13 @@ class CalwebbReprocessAssociations:
         '''Loop through paths. Setup and run reprocessing job.'''
         print(f'condaenv = {self.condaenv}')
         print(f'indir = {self.indir}')
+        print(f'outdir = {self.outdir}')
         print(f'loglevel = {self.loglevel}')
         for jsonpath in self.jsonpaths:
             print(f'jsonfile = {jsonpath.name}')
             reprocess = CalwebbReprocessAssociationSetup(
                 jsonpath, indir=self.indir, outdir=self.outdir,
                 loglevel=self.loglevel)
-            print(f'dir = {reprocess.dir}')
             reprocess.run(self.condaenv)
 
     def _check_filenames(self):
@@ -58,9 +58,8 @@ class CalwebbReprocessAssociationSetup:
         self.outdir = Path(outdir).expanduser().absolute()
         self.loglevel = loglevel
         self.name = self.injson.stem
-        self.dir = self.outdir / self.name
-        self.dir.mkdir(mode=0o750, parents=True, exist_ok=True)
-        self.json = copy(self.injson, self.dir / self.injson.name)
+        self.outdir.mkdir(mode=0o750, parents=True, exist_ok=True)
+        self.json = copy(self.injson, self.outdir / self.injson.name)
         self.info = JwstAssociationInfo(self.json)
         self.pipeline = self.info.pipeline
         self.members = self._create_link_to_members()
@@ -70,18 +69,18 @@ class CalwebbReprocessAssociationSetup:
     def run(self, condaenv):
         '''Run the reprocessing script in the specified conda environment.'''
         cmdstr = (
-            f'conda run -n {condaenv} --cwd {self.dir} '
+            f'conda run -n {condaenv} --cwd {self.outdir} '
             f'python {self.scriptpath}')
         subprocess_run(cmdstr, shell=True, check=True)
 
     def _create_link_to_members(self):
-        '''Create symbolic link to members, unless file is in dir.'''
+        '''Create symbolic link to members, unless file is in outdir.'''
         linkpaths = []
         for member in self.info.members:
             memberpath = self.indir / member
             if not memberpath.is_file():
                 raise FileNotFoundError(f'Member not found: {memberpath}')
-            linkpath = self.dir / member
+            linkpath = self.outdir / member
             if linkpath != memberpath:
                 if linkpath.is_symlink():
                     linkpath.unlink()
@@ -92,9 +91,9 @@ class CalwebbReprocessAssociationSetup:
         return linkpaths
 
     def _create_logcfg_file(self):
-        '''Create file in dir that configures calwebb logging.'''
-        logcfgpath = self.dir / f'{self.name}.cfglog'
-        logpath = self.dir / f'{self.name}.log'
+        '''Create file in outdir that configures calwebb logging.'''
+        logcfgpath = self.outdir / f'{self.name}.cfglog'
+        logpath = self.outdir / f'{self.name}.log'
         text = (
             f'[*]\n'
             f'handler = file:{logpath}\n'
@@ -106,17 +105,17 @@ class CalwebbReprocessAssociationSetup:
     def _create_python_script(self):
         '''Create python script to execute calwebb reprocessing job.'''
         for member in self.members:
-            assert member.parent == self.dir
-        assert self.logcfgpath.parent == self.dir
+            assert member.parent == self.outdir
+        assert self.logcfgpath.parent == self.outdir
         text = (
             f'#!/usr/bin/env python\n\n'
             f'from jwst.pipeline import {self.pipeline}\n\n'
-            f'outdir = "{self.dir}"\n'
+            f'outdir = "{self.outdir}"\n'
             f'result = {self.pipeline}.call(\n'
             f'    f"{{outdir}}/{self.json.name}",\n'
             f'    logcfg=f"{{outdir}}/{self.logcfgpath.name}",\n'
             f'    save_results=True)\n')
-        scriptpath = self.dir / f'{self.name}.py'
+        scriptpath = self.outdir / f'{self.name}.py'
         with open(scriptpath, 'w') as textio:
             textio.write(text)
         scriptpath.chmod(0o750)
