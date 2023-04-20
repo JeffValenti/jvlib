@@ -9,6 +9,48 @@ from numpy import (
 from scipy.ndimage import median_filter
 
 from jvlib.util.obj import use_or_set_default
+from jvlib.util.path import pathlist
+
+
+class JwstUncalExposure:
+    '''Manage uncalibrated JWST data for one exposure and detector.'''
+    def __init__(self, pathspec):
+        self.pathlist = pathlist(pathspec)
+        self._check_file_consistency()
+
+    def _check_file_consistency(self):
+        '''Check that all files are from the same exposure and detector.'''
+        first_prefix = None
+        for path in self.pathlist:
+            prefix, suffix = path.name.rsplit('_', 1)
+            if suffix != 'uncal.fits':
+                raise ValueError(f'Not an uncal file: {path.name}')
+            if not first_prefix:
+                first_prefix = prefix
+            if prefix != first_prefix:
+                raise ValueError('Multiple exposures specified')
+
+    @property
+    def sci(self):
+        '''Return concatenated data from the 'SCI' extension.'''
+        return self.concat_data_from_exten('SCI', float)
+
+    @property
+    def cds(self):
+        '''Return correlated double samples from concatenated 'SCI' data.'''
+        return np_diff(self.concat_data_from_exten('SCI', float), axis=-3)
+
+    def concat_data_from_exten(self, extname, astype):
+        '''Concatenate data from specified FITS extension. Convert to type.'''
+        concat = None
+        for path in self.pathlist:
+            with fits_open(path) as hdulist:
+                data = hdulist[extname].data.astype(astype)
+                if concat:
+                    concat = concatenate((concat, data), axis=-3)
+                else:
+                    concat = data
+        return concat
 
 
 class UncalData:
