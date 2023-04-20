@@ -26,11 +26,9 @@ Create a file named `jvlib.yml` with contents:
       - pip:
         - "git+https://github.com/JeffValenti/jvlib.git"
 
-Create the `jvlib` conda environment:
+Create the `jvlib` conda environment, installing the jvlib package from the github repository.:
 
-    conda env create -f jvlib.env
-
-The jvlib package is installed from the github repository.
+    conda env create -f jvlib.yml
 
 To install the jvlib package in edit mode, clone the repository:
 
@@ -41,3 +39,7 @@ and replace the last line of jvlib.yml with:
         - -e /Users/valenti/python/jvlib
 
 modifying the path to point at your local copy of the jvlib repository.
+
+Activate the jvlib conda environment:
+
+    conda activate jvlib
