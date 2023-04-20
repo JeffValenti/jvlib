@@ -1,5 +1,7 @@
 from csv import reader as csv_reader
 from datetime import datetime
+from json import loads as json_loads
+from re import compile as re_compile, ASCII, IGNORECASE
 from requests import get as requests_get
 from statistics import mode
 
@@ -14,39 +16,72 @@ class UnauthorizedError(Exception):
         self.message = message
 
 
-class EngineeringDatabase:
-    '''Access JWST engineering database hosted by MAST at STScI.'''
+class EngdbMnemonicMetadata(list):
+    '''Fetch mnemonic metadata for JWST engineering database.
 
-    def __init__(self, mast_api_token=None):
-        self.token = get_mast_api_token(mast_api_token)
-        self.baseurl = 'https://mast.stsci.edu/jwst/api/v0.1/' \
-            'Download/file?uri=mast:jwstedb'
+    Example:
+        >>> from jvlib.mast.engdb import EngdbMnemonicMetadata
+        >>> meta = EngdbMnemonicMetadata()
+        >>> print(meta.subsystems)
+        ['ACS', 'DRV', ...]
+        >>> metasub = meta.filter_by_subsystem(['ACS', 'ISIM', 'NIRSPEC'])
+        >>> print(metasub.subsystems)
+        ['ACS', 'ISIM', 'NIRSPEC']
+        >>> print(metasub.mnemonics)
+        ['IDAQ_EXP_STATUS1', 'IDAQ_EXP_STATUS2', ...]
+        >>> metamnem = metasub.filter_by_mnemonic('.*TEMP.*')
+        >>> print(metamnem.mnemonics)
+        ['IGDP_NRSD_ALG_A1_TEMP', 'IGDP_NRSD_ALG_A2_TEMP', ...]
+        >>> for item in metamnem[:2]:
+        >>>     print(item)
+        {'subsystem': 'NIRSPEC', 'tlmMnemonic': 'IGDP_NRSD_ALG_A1_TEMP',
+        'tlmIdentifier': 424001, 'description': 'NIRSpec converted ASIC #1
+        Temperature (K) (derived ground data point)', 'sqlDataType': 'real',
+        'unit': 'K'}
+        {'subsystem': 'NIRSPEC', 'tlmMnemonic': 'IGDP_NRSD_ALG_A2_TEMP',
+        'tlmIdentifier': 424002, 'description': 'NIRSpec converted ASIC #2
+        Temperature (K) (derived ground data point)', 'sqlDataType': 'real',
+        'unit': 'K'}
+    '''
 
-    def format_date(self, date):
-        '''Convert datetime object or ISO 8501 string to EDB date format.'''
-        if type(date) is str:
-            dtobj = datetime.fromisoformat(date)
-        elif type(date) is datetime:
-            dtobj = date
+    def __init__(self, items=None):
+        self.url = 'https://mast.stsci.edu/viz/api/v0.1/info/mnemonics'
+        if items:
+            self.extend(items)
         else:
-            raise ValueError('date must be ISO 8501 string or datetime obj')
-        return dtobj.strftime('%Y%m%dT%H%M%S')
+            json = requests_get(self.url).text
+            self.extend(json_loads(json)['data'])
+            if self[-1]['tlmMnemonic'] == 'ZZZZZZ':
+                del self[-1]
 
-    def timeseries(self, mnemonic, start, end):
-        '''Get engineering data for specified mnemonic and time interval.'''
-        startdate = self.format_date(start)
-        enddate = self.format_date(end)
-        filename = f'{mnemonic}-{startdate}-{enddate}.csv'
-        url = f'{self.baseurl}/{filename}'
-        headers = {'Authorization': f'token {self.token}'}
-        with requests_get(url, headers=headers, stream=True) as response:
-            if response.status_code == 401:
-                raise UnauthorizedError('check that MAST API token is valid')
-            response.raise_for_status()
-            return EdbTimeSeries(mnemonic, response.text.splitlines())
+    @property
+    def mnemonics(self):
+        '''Return list of all mnemonics.'''
+        return [item['tlmMnemonic'] for item in self]
+
+    @property
+    def subsystems(self):
+        '''Return list of all subsystems.'''
+        return sorted(set([item['subsystem'] for item in self]))
+
+    @property
+    def sqldatatypes(self):
+        '''Return list of all SQL data types.'''
+        return sorted(set([item['sqlDataType'] for item in self]))
+
+    def filter_by_subsystem(self, keeplist):
+        '''Return new instance containing only the specified subsystems.'''
+        items = [item for item in self if item['subsystem'] in keeplist]
+        return EngdbMnemonicMetadata(items)
+
+    def filter_by_mnemonic(self, regex):
+        '''Return new instance containing mnemonics that match expression.'''
+        crex = re_compile(regex, ASCII | IGNORECASE)
+        items = [item for item in self if crex.match(item['tlmMnemonic'])]
+        return EngdbMnemonicMetadata(items)
 
 
-class EdbTimeSeries:
+class EngdbTimeSeries:
     '''Handle time series data from the JWST engineering database.'''
 
     def __init__(self, mnemonic, lines):
@@ -122,6 +157,38 @@ class EdbTimeSeries:
             time_mjd.append(float(field[1]))
             value.append(cast[sqltype](field[2]))
         return time, time_mjd, value
+
+
+class EngineeringDatabase:
+    '''Access JWST engineering database hosted by MAST at STScI.'''
+
+    def __init__(self, mast_api_token=None):
+        self.token = get_mast_api_token(mast_api_token)
+        self.baseurl = 'https://mast.stsci.edu/jwst/api/v0.1/' \
+            'Download/file?uri=mast:jwstedb'
+
+    def format_date(self, date):
+        '''Convert datetime object or ISO 8501 string to EDB date format.'''
+        if type(date) is str:
+            dtobj = datetime.fromisoformat(date)
+        elif type(date) is datetime:
+            dtobj = date
+        else:
+            raise ValueError('date must be ISO 8501 string or datetime obj')
+        return dtobj.strftime('%Y%m%dT%H%M%S')
+
+    def timeseries(self, mnemonic, start, end):
+        '''Get engineering data for specified mnemonic and time interval.'''
+        startdate = self.format_date(start)
+        enddate = self.format_date(end)
+        filename = f'{mnemonic}-{startdate}-{enddate}.csv'
+        url = f'{self.baseurl}/{filename}'
+        headers = {'Authorization': f'token {self.token}'}
+        with requests_get(url, headers=headers, stream=True) as response:
+            if response.status_code == 401:
+                raise UnauthorizedError('check that MAST API token is valid')
+            response.raise_for_status()
+            return EngdbTimeSeries(mnemonic, response.text.splitlines())
 
 
 class EventMessages:
