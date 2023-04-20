@@ -1,11 +1,10 @@
-import numpy as np
-from collections import namedtuple
 from csv import reader as csv_reader
 from datetime import datetime
 from requests import get as requests_get
 from statistics import mode
 
 from .api import get_mast_api_token
+
 
 class UnauthorizedError(Exception):
     '''Handle MAST authorization exception.'''
@@ -46,6 +45,7 @@ class EngineeringDatabase:
             response.raise_for_status()
             return EdbTimeSeries(mnemonic, response.text.splitlines())
 
+
 class EdbTimeSeries:
     '''Handle time series data from the JWST engineering database.'''
 
@@ -63,7 +63,7 @@ class EdbTimeSeries:
     def timestep_seconds(self):
         '''Return time step between successive times in seconds.'''
         try:
-            return [(b - a).total_seconds() for  a, b in zip(
+            return [(b - a).total_seconds() for a, b in zip(
                 self.time[:-1], self.time[1:])]
         except IndexError:
             return None
@@ -91,47 +91,38 @@ class EdbTimeSeries:
         # Define python analog of SQL data types.
         # https://docs.microsoft.com/en-us/sql/machine-learning/python
         #     /python-libraries-and-data-types?view=sql-server-ver15
-        cast = {'bigint': float, 
+        cast = {'bigint': float,
                 'binary': bytes,
                 'bit': bool,
                 'char': str,
                 'date': datetime,
                 'datetime': datetime,
-                'float': float, 
+                'float': float,
                 'nchar': str,
                 'nvarchar': str,
                 'nvarchar(max)': str,
                 'real': float,
                 'smalldatetime': datetime,
-                'smallint': int, 
+                'smallint': int,
                 'tinyint': int,
                 'uniqueidentifier': str,
                 'varbinary': bytes,
                 'varbinary(max)': bytes,
-                'varchar': str, 
+                'varchar': str,
                 'varchar(n)': str,
                 'varchar(max)': str}
-        
-        # Initialize return variables.
         time = []
         time_mjd = []
         value = []
-
         for field in csv_reader(lines, delimiter=',', quotechar='"'):
-
-            # Ignore header row.
             if field[0] == 'theTime':
                 continue
-
-            # Extract SQL data type in engineering database.
             sqltype = field[3]
-
-            # Convert SQL type to python type. Save time, MJD, and value.
             time.append(datetime.fromisoformat(field[0]))
             time_mjd.append(float(field[1]))
             value.append(cast[sqltype](field[2]))
-
         return time, time_mjd, value
+
 
 class EventMessages:
     '''Fetch and interpret OSS event messages for specified time interval.'''
@@ -139,7 +130,7 @@ class EventMessages:
     def __init__(self, start, end, engdb=None):
         '''Instantiate an EventMessages object.
 
-        :param start: earliest UTC date and time 
+        :param start: earliest UTC date and time
         :type start: datetime, str parsable by datetime.fromisoformat()
         :param end: end of time interval to use when fetching messages
         :type end: datetime, str parsable by datetime.fromisoformat()
