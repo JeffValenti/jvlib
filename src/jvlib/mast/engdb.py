@@ -55,6 +55,11 @@ class EngdbMnemonicMetadata(list):
                 del self[-1]
 
     @property
+    def descriptions(self):
+        '''Return list of all descriptions.'''
+        return [item['description'] for item in self]
+
+    @property
     def mnemonics(self):
         '''Return list of all mnemonics.'''
         return [item['tlmMnemonic'] for item in self]
@@ -78,6 +83,12 @@ class EngdbMnemonicMetadata(list):
         '''Return new instance containing mnemonics that match expression.'''
         crex = re_compile(regex, ASCII | IGNORECASE)
         items = [item for item in self if crex.match(item['tlmMnemonic'])]
+        return EngdbMnemonicMetadata(items)
+
+    def filter_by_description(self, regex):
+        '''Return new instance containing descriptions that match expression.'''
+        crex = re_compile(regex, ASCII | IGNORECASE)
+        items = [item for item in self if crex.match(item['description'])]
         return EngdbMnemonicMetadata(items)
 
 
