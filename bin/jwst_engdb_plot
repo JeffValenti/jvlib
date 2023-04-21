@@ -1,0 +1,51 @@
+#!/usr/bin/env python
+
+from argparse import ArgumentParser
+from datetime import datetime, time, timedelta
+
+from matplotlib.figure import Figure
+from matplotlib.dates import DateFormatter
+
+from jvlib.mast.engdb import EngineeringDatabase
+
+# Configure argument parser.
+parser = ArgumentParser(
+    prog = 'jwst_engdb_plot',
+    description = 'Retrieve and plot JWST engineering data')
+parser.add_argument(
+    'start_time', type=datetime.fromisoformat,
+    help='Earliest UTC time to search, e.g. 2023-03-02T17:49:59.945')
+parser.add_argument(
+    'end_time', type=datetime.fromisoformat,
+    help='Latest UTC time to search, e.g., 2023-03-03T00:20:16.754')
+parser.add_argument(
+    'mnemonic',
+    help='Engineering mnemonic to plot')
+parser.add_argument(
+    '-mast_api_token', default=None,
+    help='Override MAST API token in file ~/.mast_api_token')
+
+# Parse arguments.
+args = parser.parse_args()
+start_time = args.start_time
+end_time = args.end_time
+mnemonic = args.mnemonic
+
+# Get engineering data for specified mnemonic and time interval.
+engdb = EngineeringDatabase(mast_api_token=args.mast_api_token)
+timeseries = engdb.timeseries(mnemonic, start_time, end_time)
+
+# Create figure.
+figure = Figure()
+figure.subplots_adjust(left=0.13, bottom=0.14, right=0.97, top=0.98)
+axes = figure.subplots()
+axes.plot(timeseries.time, timeseries.value, 'b-o', lw=0.5, ms=1)
+axes.set_xlim(timeseries.time[0], timeseries.time[-1])
+axes.xaxis.set_major_formatter(DateFormatter('%H:%M:%S\n%y-%m-%d'))
+axes.set_xlabel('Observatory Time [HH:MM:SS yy-mm-dd]')
+axes.set_ylabel(mnemonic)
+
+# Save figure to file.
+outfile = f'{mnemonic}.png'
+print(f'writing {outfile}')
+figure.savefig(outfile)
