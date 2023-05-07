@@ -1,0 +1,26 @@
+#!/usr/bin/env python
+
+from astropy.table import Table
+
+from jvlib.calwebb.info import calwebb_version
+
+
+# Configure argument parser.
+parser = ArgumentParser(
+    prog = 'calwebb_version',
+    description = 'Get version info for calwebb FITS file')
+parser.add_argument('fitsfile', help='Name of fits file produced by calwebb')
+
+# Parse arguments
+args = parser.parse_args()
+
+# Get version information for the specifed FITS file. 
+values, descriptions, text = calwebb_version(args.fitsfile)
+keys, vals = zip(*values.items())
+desc = list(descriptions.values())
+names = ('Description', 'Value', 'Keyword')
+table = Table([desc, vals, keys], names=names)
+for name in names:
+    table[name].info.format = '<'
+table.pprint_all()
+print(f'\n{text}')
