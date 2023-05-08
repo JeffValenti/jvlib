@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 
+from argparse import ArgumentParser
+
 from astropy.table import Table
 
 from jvlib.calwebb.info import calwebb_version
