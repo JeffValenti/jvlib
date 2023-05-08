@@ -11,9 +11,10 @@ from jvlib.calwebb.assoc import JwstAssociationInfo
 class CalwebbReprocessAssociations:
     '''Reprocess JWST associations with calwebb in conda environment.'''
     def __init__(
-            self, condaenv, jsonspec, context='latest',
+            self, condaenv, context, jsonspec,
             indir='.', outdir='.', loglevel='DEBUG'):
         self.condaenv = condaenv
+        self.context = context
         self.jsonspec = jsonspec
         self.indir = Path(indir).expanduser().absolute().resolve()
         self.outdir = Path(outdir).expanduser().absolute().resolve()
@@ -26,14 +27,15 @@ class CalwebbReprocessAssociations:
     def reprocess(self):
         '''Loop through paths. Setup and run reprocessing job.'''
         print(f'condaenv = {self.condaenv}')
+        print(f'context = {self.context}')
         print(f'indir = {self.indir}')
         print(f'outdir = {self.outdir}')
         print(f'loglevel = {self.loglevel}')
         for jsonpath in self.jsonpaths:
             print(f'jsonfile = {jsonpath.name}')
             reprocess = CalwebbReprocessAssociationSetup(
-                jsonpath, indir=self.indir, outdir=self.outdir,
-                loglevel=self.loglevel)
+                context, jsonpath,
+                indir=self.indir, outdir=self.outdir, loglevel=self.loglevel)
             reprocess.run(self.condaenv)
 
     def _check_filenames(self):
@@ -54,9 +56,9 @@ class CalwebbReprocessAssociationSetup:
         loglevel (str) DEBUG (default), INFO, WARNING, ERROR, or CRITICAL
     '''
     def __init__(
-            self, injson, context, indir='.', outdir='.', loglevel='DEBUG'):
-        self.injson = Path(injson).expanduser().absolute()
+            self, context, injson, indir='.', outdir='.', loglevel='DEBUG'):
         self.crds_context = parse_context(context)
+        self.injson = Path(injson).expanduser().absolute()
         self.indir = Path(indir).expanduser().absolute()
         self.outdir = Path(outdir).expanduser().absolute()
         self.loglevel = loglevel
@@ -132,7 +134,7 @@ class CalwebbReprocessExposures:
     def __init__(
             self, condaenv, context, pathspec, outdir='.', loglevel='DEBUG'):
         self.condaenv = condaenv
-        self.crds_context = parse_context(context)
+        self.context = context
         self.pathspec = pathspec
         self.outdir = Path(outdir).expanduser().absolute()
         self.loglevel = loglevel
@@ -142,17 +144,20 @@ class CalwebbReprocessExposures:
     def reprocess(self):
         '''Loop through paths. Setup and run reprocessing job.'''
         print(f'condaenv = {self.condaenv}')
+        print(f"context = '{self.context}'")
         print(f'outdir = {self.outdir}')
         print(f'loglevel = {self.loglevel}')
         for path in self.paths:
             print(f'inputfile = {path.name}')
             reprocess = CalwebbReprocessExposureSetup(
-                path, outdir=self.outdir, loglevel=self.loglevel)
+                self.context, path,
+                outdir=self.outdir, loglevel=self.loglevel)
             reprocess.run(self.condaenv)
             for nextpath in reprocess.nextpath:
                 print(f'    nextpath = {nextpath.name}')
                 nextstage = CalwebbReprocessExposureSetup(
-                    nextpath, outdir=self.outdir, loglevel=self.loglevel)
+                    self.context, nextpath,
+                    outdir=self.outdir, loglevel=self.loglevel)
                 nextstage.run(self.condaenv)
 
     def _check_filenames(self):
@@ -175,7 +180,8 @@ class CalwebbReprocessExposureSetup:
         outdir (str, Path) directory to store all output. Default is CWD
         loglevel (str) DEBUG (default), INFO, WARNING, ERROR, or CRITICAL
     '''
-    def __init__(self, inputfile, outdir='.', loglevel='DEBUG'):
+    def __init__(self, context, inputfile, outdir='.', loglevel='DEBUG'):
+        self.crds_context = parse_context(context)
         self.inputpath = Path(inputfile).expanduser().absolute()
         self.outdir = Path(outdir).expanduser().absolute()
         self.loglevel = loglevel
