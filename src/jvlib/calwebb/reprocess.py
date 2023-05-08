@@ -34,7 +34,7 @@ class CalwebbReprocessAssociations:
         for jsonpath in self.jsonpaths:
             print(f'jsonfile = {jsonpath.name}')
             reprocess = CalwebbReprocessAssociationSetup(
-                context, jsonpath,
+                self.context, jsonpath,
                 indir=self.indir, outdir=self.outdir, loglevel=self.loglevel)
             reprocess.run(self.condaenv)
 
