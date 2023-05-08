@@ -11,11 +11,15 @@ parser = ArgumentParser(
     description = 'Reprocess JWST associations files in conda environment')
 parser.add_argument(
     'condaenv',
-    help='Name of conda envirnment to use when reprocessing')
+    help='Name of conda environment to use when reprocessing')
 parser.add_argument(
     'jsonspec',
     nargs='*',
     help='Path specification for input JWST association files (_asn.json)')
+parser.add_argument(
+    '-context',
+    default='latest',
+    help='CRDS context to use when reprocessing, e.g., 1077 or jwst_1077.pmap')
 parser.add_argument(
     '-indir',
     default='.',
@@ -35,6 +39,6 @@ args = parser.parse_args()
 
 # Reprocess specified input files in specified conda environment.
 repro = CalwebbReprocessAssociations(
-    args.condaenv, args.jsonspec, indir=args.indir, outdir=args.outdir,
-    loglevel=args.loglevel)
+    args.condaenv, args.jsonspec, context=args.context,
+    indir=args.indir, outdir=args.outdir, loglevel=args.loglevel)
 repro.reprocess()

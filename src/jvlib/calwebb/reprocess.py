@@ -11,7 +11,8 @@ from jvlib.calwebb.assoc import JwstAssociationInfo
 class CalwebbReprocessAssociations:
     '''Reprocess JWST associations with calwebb in conda environment.'''
     def __init__(
-            self, condaenv, jsonspec, indir='.', outdir='.', loglevel='DEBUG'):
+            self, condaenv, jsonspec, context='latest',
+            indir='.', outdir='.', loglevel='DEBUG'):
         self.condaenv = condaenv
         self.jsonspec = jsonspec
         self.indir = Path(indir).expanduser().absolute().resolve()
@@ -47,13 +48,15 @@ class CalwebbReprocessAssociationSetup:
     '''Create directory to reprocess an input association file with calwebb.
 
     Arguments:
-        jsonpath (str, Path) _asn.json file
+        injson (str, Path) input association file (_asn.json)
         indir (str, Path) directory containing all input data. Default is CWD
         outdir (str, Path) directory to store all output. Default is CWD
         loglevel (str) DEBUG (default), INFO, WARNING, ERROR, or CRITICAL
     '''
-    def __init__(self, injson, indir='.', outdir='.', loglevel='DEBUG'):
+    def __init__(
+            self, injson, context, indir='.', outdir='.', loglevel='DEBUG'):
         self.injson = Path(injson).expanduser().absolute()
+        self.crds_context = parse_context(context)
         self.indir = Path(indir).expanduser().absolute()
         self.outdir = Path(outdir).expanduser().absolute()
         self.loglevel = loglevel
@@ -109,7 +112,9 @@ class CalwebbReprocessAssociationSetup:
         assert self.logcfgpath.parent == self.outdir
         text = (
             f'#!/usr/bin/env python\n\n'
+            f'from os import environ as os_environ\n'
             f'from jwst.pipeline import {self.pipeline}\n\n'
+            f"os_environ['CRDS_CONTEXT'] = '{self.crds_context}'\n"
             f'outdir = "{self.outdir}"\n'
             f'result = {self.pipeline}.call(\n'
             f'    f"{{outdir}}/{self.json.name}",\n'
@@ -124,8 +129,10 @@ class CalwebbReprocessAssociationSetup:
 
 class CalwebbReprocessExposures:
     '''Reprocess the specified input exposure files with calwebb pipeline.'''
-    def __init__(self, condaenv, pathspec, outdir='.', loglevel='DEBUG'):
+    def __init__(
+            self, condaenv, context, pathspec, outdir='.', loglevel='DEBUG'):
         self.condaenv = condaenv
+        self.crds_context = parse_context(context)
         self.pathspec = pathspec
         self.outdir = Path(outdir).expanduser().absolute()
         self.loglevel = loglevel
@@ -217,7 +224,9 @@ class CalwebbReprocessExposureSetup:
         assert self.logcfgpath.parent == self.outdir
         text = (
             f'#!/usr/bin/env python\n\n'
+            f'from os import environ as os_environ\n'
             f'from jwst.pipeline import {self.pipeline}Pipeline\n\n'
+            f"os_environ['CRDS_CONTEXT'] = '{self.crds_context}'\n"
             f'outdir = "{self.outdir}"\n'
             f'result = {self.pipeline}Pipeline.call(\n'
             f'    f"{{outdir}}/{self.symlink.name}",\n'
@@ -259,3 +268,18 @@ class CalwebbReprocessExposureSetup:
             return exptype, nints, 'Spec2'
         else:
             raise ValueError(f'No pipeline for exptype={exptype}')
+
+def parse_context(context):
+    '''Return value for the CRDS_CONTEXT environment variable.'''
+    key = 'CRDS_CONTEXT'
+    if context in ['latest', '', None]:
+        return ''
+    try:
+        return f'jwst_{int(context):04d}.pmap'
+    except ValueError:
+        if context.startswith('jwst_') and context.endswith('.pmap') \
+                and context[5:-5].isdigit():
+            return context
+        raise ValueError(
+            f"CRDS_CONTEXT='{context}' is not '', 'latest', "
+            f"or 'jwst_NNNN.pmap'")
