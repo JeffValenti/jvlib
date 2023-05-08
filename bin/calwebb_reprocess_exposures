@@ -13,13 +13,13 @@ parser.add_argument(
     'condaenv',
     help='Name of conda environment to use when reprocessing')
 parser.add_argument(
+    'context',
+    default='latest',
+    help="CRDS context, e.g., '', 'latest', 'jwst_1077.pmap', or 1077")
+parser.add_argument(
     'pathspec',
     nargs='*',
     help='quoted path specification or path list expanded by shell')
-parser.add_argument(
-    '-context',
-    default='latest',
-    help='CRDS context to use when reprocessing, e.g., 1077 or jwst_1077.pmap')
 parser.add_argument(
     '-outdir',
     default='.',
@@ -35,6 +35,6 @@ args = parser.parse_args()
 
 # Reprocess specified input files in specified conda environment.
 repro = CalwebbReprocessExposures(
-    args.condaenv, args.pathspec,
-    context=args.context, outdir=args.outdir, loglevel=args.loglevel)
+    args.condaenv, args.context, args.pathspec,
+    outdir=args.outdir, loglevel=args.loglevel)
 repro.reprocess()
