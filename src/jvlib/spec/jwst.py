@@ -29,8 +29,6 @@ class NirspecFixedSlitSpectrum(BaseSpectrum):
             wave = extension.data['wavelength']
             flux = extension.data['flux'] * fluxscale
             fsig = extension.data['flux_error'] * fluxscale
-            print_all(fsig)
-            exit()
             fok = isfinite(flux) & (flux != 0) & (extension.data['dq'] == 0)
             super().__init__(wave, flux, fsig, fok)
             self.label = self._get_label()

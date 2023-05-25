@@ -315,8 +315,6 @@ class SpectrumAxes:
         for spec in self._speclist:
             x, y, u, ok, xlabel, ylabel = self._get_plot_data(spec)
             if self._errorbar and u is not None:
-                print(u[1000:1003])
-                exit()
                 segment = self.axes.errorbar(x, y, u, label=spec.label)
             else:
                 segment = self.axes.plot(x, y, label=spec.label)
