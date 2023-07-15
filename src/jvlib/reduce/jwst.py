@@ -87,7 +87,7 @@ class JwstUncalExposure:
             with fits_open(path) as hdulist:
                 scidata = hdulist['SCI'].data
         else:
-            scidata = np.empty(self.expdim, dtype=np.uint16)
+            scidata = np.empty(self.expdim, dtype=np.int16)
             for path in self.pathlist:
                 with fits_open(path) as hdulist:
                     ibeg = hdulist['PRIMARY'].header['INTSTART'] - 1
